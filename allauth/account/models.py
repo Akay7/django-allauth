@@ -23,9 +23,10 @@ from .adapter import get_adapter
 class EmailAddress(models.Model):
 
     user = models.ForeignKey(allauth_app_settings.USER_MODEL,
-                             verbose_name=_('user'))
+                             verbose_name=_('user'),
+                             on_delete=models.CASCADE)
     email = models.EmailField(unique=app_settings.UNIQUE_EMAIL,
-                              max_length=254,
+                              max_length=app_settings.EMAIL_MAX_LENGTH,
                               verbose_name=_('e-mail address'))
     verified = models.BooleanField(verbose_name=_('verified'), default=False)
     primary = models.BooleanField(verbose_name=_('primary'), default=False)
@@ -85,7 +86,8 @@ class EmailAddress(models.Model):
 class EmailConfirmation(models.Model):
 
     email_address = models.ForeignKey(EmailAddress,
-                                      verbose_name=_('e-mail address'))
+                                      verbose_name=_('e-mail address'),
+                                      on_delete=models.CASCADE)
     created = models.DateTimeField(verbose_name=_('created'),
                                    default=timezone.now)
     sent = models.DateTimeField(verbose_name=_('sent'), null=True)
@@ -127,7 +129,9 @@ class EmailConfirmation(models.Model):
         self.sent = timezone.now()
         self.save()
         signals.email_confirmation_sent.send(sender=self.__class__,
-                                             confirmation=self)
+                                             request=request,
+                                             confirmation=self,
+                                             signup=signup)
 
 
 class EmailConfirmationHMAC:
@@ -169,4 +173,6 @@ class EmailConfirmationHMAC:
     def send(self, request=None, signup=False):
         get_adapter(request).send_confirmation_mail(request, self, signup)
         signals.email_confirmation_sent.send(sender=self.__class__,
-                                             confirmation=self)
+                                             request=request,
+                                             confirmation=self,
+                                             signup=signup)

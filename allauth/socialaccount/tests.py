@@ -7,7 +7,6 @@ import warnings
 import json
 
 from django.test.utils import override_settings
-from django.core.urlresolvers import reverse
 from django.test.client import RequestFactory
 from django.contrib.messages.middleware import MessageMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -15,6 +14,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.contrib.sites.models import Site
 from django.conf import settings
 
+from ..compat import reverse
 from ..tests import MockedResponse, mocked_response, TestCase
 from ..account import app_settings as account_settings
 from ..account.models import EmailAddress
@@ -559,3 +559,42 @@ class SocialAccountTests(TestCase):
                 verified=False,
                 primary=True
             ).exists())
+
+    @override_settings(
+        ACCOUNT_EMAIL_REQUIRED=True,
+        ACCOUNT_EMAIL_VERIFICATION='mandatory',
+        ACCOUNT_UNIQUE_EMAIL=True,
+        ACCOUNT_USERNAME_REQUIRED=False,
+        ACCOUNT_AUTHENTICATION_METHOD='email',
+        SOCIALACCOUNT_AUTO_SIGNUP=False)
+    def test_unique_email_validation_signup(self):
+        session = self.client.session
+        User = get_user_model()
+        User.objects.create(
+            email='me@provider.com')
+        sociallogin = SocialLogin(
+            user=User(
+                email='me@provider.com'),
+            account=SocialAccount(
+                provider='google'
+            ),
+            email_addresses=[
+                EmailAddress(
+                    email='me@provider.com',
+                    verified=True,
+                    primary=True)])
+        session['socialaccount_sociallogin'] = sociallogin.serialize()
+        session.save()
+        resp = self.client.get(reverse('socialaccount_signup'))
+        form = resp.context['form']
+        self.assertEquals(form['email'].value(), 'me@provider.com')
+        resp = self.client.post(
+            reverse('socialaccount_signup'),
+            data={'email': 'me@provider.com'})
+        self.assertFormError(
+            resp,
+            'form',
+            'email',
+            'An account already exists with this e-mail address.'
+            ' Please sign in to that account first, then connect'
+            ' your Google account.')

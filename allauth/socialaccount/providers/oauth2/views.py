@@ -3,10 +3,10 @@ from __future__ import absolute_import
 from datetime import timedelta
 
 from django.core.exceptions import PermissionDenied
-from django.core.urlresolvers import reverse
 from django.http import HttpResponseRedirect
 from django.utils import timezone
 
+from allauth.compat import reverse
 from allauth.exceptions import ImmediateHttpResponse
 from allauth.utils import build_absolute_uri
 from allauth.socialaccount.helpers import render_authentication_error
@@ -33,7 +33,7 @@ class OAuth2Adapter(object):
         self.request = request
 
     def get_provider(self):
-        return providers.registry.by_id(self.provider_id)
+        return providers.registry.by_id(self.provider_id, self.request)
 
     def complete_login(self, request, app, access_token, **kwargs):
         """

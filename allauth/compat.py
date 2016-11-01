@@ -1,5 +1,10 @@
 import django
 
+if django.VERSION > (1, 10,):
+    from django.urls import NoReverseMatch, reverse, reverse_lazy
+else:
+    from django.core.urlresolvers import NoReverseMatch, reverse, reverse_lazy  # noqa
+
 if django.VERSION > (1, 8,):
     from collections import OrderedDict
 else:
@@ -14,8 +19,8 @@ else:
     # Wire the Django >= 1.8 API to the Django < 1.7 implementation.
     def render_to_string(
             template_name, context=None, request=None, using=None):
-        assert (
-            using is None, "Multiple template engines required Django >= 1.8")
+        assert using is None, \
+            "Multiple template engines required Django >= 1.8"
         return _render_to_string(
             template_name, context, RequestContext(request))
 
@@ -34,3 +39,25 @@ if django.VERSION >= (1, 9, 0):
 else:
     def validate_password(password, user=None, password_validators=None):
         pass
+
+
+def template_context_value(context, key):
+    try:
+        value = context[key]
+    except KeyError:
+        value = getattr(context, key)
+    return value
+
+
+def is_anonymous(user):
+    if django.VERSION > (1, 10,):
+        return user.is_anonymous
+    else:
+        return user.is_anonymous()
+
+
+def is_authenticated(user):
+    if django.VERSION > (1, 10,):
+        return user.is_authenticated
+    else:
+        return user.is_authenticated()

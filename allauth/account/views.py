@@ -1,4 +1,3 @@
-from django.core.urlresolvers import reverse, reverse_lazy
 from django.http import (HttpResponseRedirect, Http404,
                          HttpResponsePermanentRedirect)
 from django.views.generic.base import TemplateResponseMixin, View, TemplateView
@@ -10,6 +9,7 @@ from django.shortcuts import redirect
 from django.views.decorators.debug import sensitive_post_parameters
 from django.utils.decorators import method_decorator
 
+from ..compat import is_anonymous, is_authenticated, reverse, reverse_lazy
 from ..exceptions import ImmediateHttpResponse
 from ..utils import get_form_class, get_request_param, get_current_site
 
@@ -54,7 +54,7 @@ class RedirectAuthenticatedUserMixin(object):
         # WORKAROUND: https://code.djangoproject.com/ticket/19316
         self.request = request
         # (end WORKAROUND)
-        if request.user.is_authenticated() and \
+        if is_authenticated(request.user) and \
                 app_settings.AUTHENTICATED_LOGIN_REDIRECTS:
             redirect_to = self.get_authenticated_redirect_url()
             response = HttpResponseRedirect(redirect_to)
@@ -191,15 +191,23 @@ class SignupView(RedirectAuthenticatedUserMixin, CloseableSignupMixin,
         # By assigning the User to a property on the view, we allow subclasses
         # of SignupView to access the newly created User instance
         self.user = form.save(self.request)
-        return complete_signup(self.request, self.user,
-                               app_settings.EMAIL_VERIFICATION,
-                               self.get_success_url())
+        try:
+            return complete_signup(
+                self.request, self.user,
+                app_settings.EMAIL_VERIFICATION,
+                self.get_success_url())
+        except ImmediateHttpResponse as e:
+            return e.response
 
     def get_context_data(self, **kwargs):
         ret = super(SignupView, self).get_context_data(**kwargs)
         form = ret['form']
-        form.fields["email"].initial = self.request.session \
-            .get('account_verified_email')
+        email = self.request.session.get('account_verified_email')
+        email_keys = ['email']
+        if app_settings.SIGNUP_EMAIL_ENTER_TWICE:
+            email_keys.append('email2')
+        for email_key in email_keys:
+            form.fields[email_key].initial = email
         login_url = passthrough_next_redirect_url(self.request,
                                                   reverse("account_login"),
                                                   self.redirect_field_name)
@@ -280,7 +288,7 @@ class ConfirmEmailView(TemplateResponseMixin, View):
         if user_pk_str:
             user_pk = url_str_to_user_pk(user_pk_str)
         user = confirmation.email_address.user
-        if user_pk == user.pk and self.request.user.is_anonymous():
+        if user_pk == user.pk and is_anonymous(self.request.user):
             return perform_login(self.request,
                                  user,
                                  app_settings.EmailVerificationMethod.NONE,
@@ -665,14 +673,14 @@ class LogoutView(TemplateResponseMixin, View):
     def get(self, *args, **kwargs):
         if app_settings.LOGOUT_ON_GET:
             return self.post(*args, **kwargs)
-        if not self.request.user.is_authenticated():
+        if not is_authenticated(self.request.user):
             return redirect(self.get_redirect_url())
         ctx = self.get_context_data()
         return self.render_to_response(ctx)
 
     def post(self, *args, **kwargs):
         url = self.get_redirect_url()
-        if self.request.user.is_authenticated():
+        if is_authenticated(self.request.user):
             self.logout()
         return redirect(url)
 

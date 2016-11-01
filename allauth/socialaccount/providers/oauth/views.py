@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
-from django.core.urlresolvers import reverse
-
+from allauth.compat import reverse
 from allauth.socialaccount.helpers import render_authentication_error
 from allauth.socialaccount.providers.oauth.client import (OAuthClient,
                                                           OAuthError)
@@ -24,7 +23,7 @@ class OAuthAdapter(object):
         raise NotImplementedError
 
     def get_provider(self):
-        return providers.registry.by_id(self.provider_id)
+        return providers.registry.by_id(self.provider_id, self.request)
 
 
 class OAuthView(object):

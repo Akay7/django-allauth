@@ -111,6 +111,13 @@ class AppSettings(object):
         return ret
 
     @property
+    def EMAIL_MAX_LENGTH(self):
+        """
+        Adjust max_length of e-mail addresses
+        """
+        return self._setting("EMAIL_MAX_LENGTH", 254)
+
+    @property
     def UNIQUE_EMAIL(self):
         """
         Enforce uniqueness of e-mail addresses
@@ -118,18 +125,34 @@ class AppSettings(object):
         return self._setting("UNIQUE_EMAIL", True)
 
     @property
-    def SIGNUP_PASSWORD_VERIFICATION(self):
+    def SIGNUP_EMAIL_ENTER_TWICE(self):
+        """
+        Signup email verification
+        """
+        return self._setting("SIGNUP_EMAIL_ENTER_TWICE", False)
+
+    @property
+    def SIGNUP_PASSWORD_ENTER_TWICE(self):
         """
         Signup password verification
         """
-        return self._setting("SIGNUP_PASSWORD_VERIFICATION", True)
+        legacy = self._setting('SIGNUP_PASSWORD_VERIFICATION', True)
+        return self._setting('SIGNUP_PASSWORD_ENTER_TWICE', legacy)
 
     @property
     def PASSWORD_MIN_LENGTH(self):
         """
         Minimum password Length
         """
-        return self._setting("PASSWORD_MIN_LENGTH", 6)
+        import django
+        from django.conf import settings
+        ret = None
+        has_validators = (
+            django.VERSION[:2] >= (1, 9) and
+            bool(getattr(settings, 'AUTH_PASSWORD_VALIDATORS', [])))
+        if not has_validators:
+            ret = self._setting("PASSWORD_MIN_LENGTH", 6)
+        return ret
 
     @property
     def EMAIL_SUBJECT_PREFIX(self):

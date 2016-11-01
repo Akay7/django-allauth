@@ -9,6 +9,7 @@ from allauth.socialaccount.models import (SocialLogin,
 from allauth.socialaccount.helpers import complete_social_login
 from allauth.socialaccount.helpers import render_authentication_error
 from allauth.socialaccount import providers
+from allauth.socialaccount import app_settings
 from allauth.socialaccount.providers.oauth2.views import (OAuth2Adapter,
                                                           OAuth2LoginView,
                                                           OAuth2CallbackView)
@@ -33,7 +34,7 @@ def compute_appsecret_proof(app, token):
 
 
 def fb_complete_login(request, app, token):
-    provider = providers.registry.by_id(FacebookProvider.id)
+    provider = providers.registry.by_id(FacebookProvider.id, request)
     resp = requests.get(
         GRAPH_API_URL + '/me',
         params={
@@ -49,8 +50,11 @@ def fb_complete_login(request, app, token):
 
 class FacebookOAuth2Adapter(OAuth2Adapter):
     provider_id = FacebookProvider.id
+    provider_default_auth_url = 'https://www.facebook.com/dialog/oauth'
 
-    authorize_url = 'https://www.facebook.com/dialog/oauth'
+    settings = app_settings.PROVIDERS.get(provider_id, {})
+
+    authorize_url = settings.get('AUTHORIZE_URL', provider_default_auth_url)
     access_token_url = GRAPH_API_URL + '/oauth/access_token'
     expires_in_key = 'expires'
 
@@ -69,10 +73,10 @@ def login_by_token(request):
         form = FacebookConnectForm(request.POST)
         if form.is_valid():
             try:
-                provider = providers.registry.by_id(FacebookProvider.id)
+                provider = providers.registry.by_id(
+                    FacebookProvider.id, request)
                 login_options = provider.get_fb_login_options(request)
-                app = providers.registry.by_id(FacebookProvider.id) \
-                    .get_app(request)
+                app = provider.get_app(request)
                 access_token = form.cleaned_data['access_token']
                 if login_options.get('auth_type') == 'reauthenticate':
                     info = requests.get(

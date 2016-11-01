@@ -14,7 +14,6 @@ from django.contrib.auth import logout as django_logout, authenticate
 from django.contrib.auth.models import AbstractUser
 from django.core.cache import cache
 from django.core.mail import EmailMultiAlternatives, EmailMessage
-from django.core.urlresolvers import reverse
 from django.http import HttpResponse
 from django.http import HttpResponseRedirect
 from django.template.loader import render_to_string
@@ -27,11 +26,11 @@ try:
 except ImportError:
     from django.utils.encoding import force_unicode as force_text
 
-from ..compat import validate_password
+from ..compat import is_authenticated, reverse, validate_password
 from ..utils import (build_absolute_uri, get_current_site,
                      generate_unique_username,
                      get_user_model, import_attribute,
-                     resolve_url)
+                     resolve_url, email_address_exists)
 
 from . import app_settings
 
@@ -50,7 +49,9 @@ class DefaultAccountAdapter(object):
         'username_taken':
         AbstractUser._meta.get_field('username').error_messages['unique'],
         'too_many_login_attempts':
-        _('Too many failed login attempts. Try again later.')
+        _('Too many failed login attempts. Try again later.'),
+        'email_taken':
+        _("A user is already registered with this e-mail address."),
     }
 
     def __init__(self, request=None):
@@ -144,7 +145,7 @@ class DefaultAccountAdapter(object):
         that URLs passed explicitly (e.g. by passing along a `next`
         GET parameter) take precedence over the value returned here.
         """
-        assert request.user.is_authenticated()
+        assert is_authenticated(request.user)
         url = getattr(settings, "LOGIN_REDIRECT_URLNAME", None)
         if url:
             warnings.warn("LOGIN_REDIRECT_URLNAME is deprecated, simply"
@@ -167,7 +168,7 @@ class DefaultAccountAdapter(object):
         """
         The URL to return to after successful e-mail confirmation.
         """
-        if request.user.is_authenticated():
+        if is_authenticated(request.user):
             if app_settings.EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL:
                 return  \
                     app_settings.EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL
@@ -210,6 +211,7 @@ class DefaultAccountAdapter(object):
                     first_name,
                     last_name,
                     email,
+                    username,
                     'user']))
 
     def generate_unique_username(self, txts, regex=None):
@@ -290,11 +292,16 @@ class DefaultAccountAdapter(object):
         restric the allowed password choices.
         """
         min_length = app_settings.PASSWORD_MIN_LENGTH
-        if len(password) < min_length:
+        if min_length and len(password) < min_length:
             raise forms.ValidationError(_("Password must be a minimum of {0} "
                                           "characters.").format(min_length))
         validate_password(password, user)
         return password
+
+    def validate_unique_email(self, email):
+        if email_address_exists(email):
+            raise forms.ValidationError(self.error_messages['email_taken'])
+        return email
 
     def add_message(self, request, level, message_template,
                     message_context=None, extra_tags=''):

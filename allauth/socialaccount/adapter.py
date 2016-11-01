@@ -1,22 +1,31 @@
 from __future__ import absolute_import
 
 from django.utils.translation import ugettext_lazy as _
-from django.core.urlresolvers import reverse
 from django.core.exceptions import ValidationError
 
 from ..utils import (import_attribute,
                      email_address_exists,
-                     valid_email_or_none)
+                     valid_email_or_none,
+                     serialize_instance,
+                     deserialize_instance)
 from ..account.utils import user_email, user_username, user_field
 from ..account.models import EmailAddress
 from ..account.adapter import get_adapter as get_account_adapter
 from ..account import app_settings as account_settings
 from ..account.app_settings import EmailVerificationMethod
+from ..compat import is_authenticated, reverse
 
 from . import app_settings
 
 
 class DefaultSocialAccountAdapter(object):
+
+    error_messages = {
+        'email_taken':
+        _("An account already exists with this e-mail address."
+          " Please sign in to that account first, then connect"
+          " your %s account.")
+    }
 
     def __init__(self, request=None):
         self.request = request
@@ -106,7 +115,7 @@ class DefaultSocialAccountAdapter(object):
         Returns the default URL to redirect to after successfully
         connecting a social account.
         """
-        assert request.user.is_authenticated()
+        assert is_authenticated(request.user)
         url = reverse('socialaccount_connections')
         return url
 
@@ -164,6 +173,21 @@ class DefaultSocialAccountAdapter(object):
         regular flow by raising an ImmediateHttpResponse
         """
         return get_account_adapter(request).is_open_for_signup(request)
+
+    def get_signup_form_initial_data(self, sociallogin):
+        user = sociallogin.user
+        initial = {
+            'email': user_email(user) or '',
+            'username': user_username(user) or '',
+            'first_name': user_field(user, 'first_name') or '',
+            'last_name': user_field(user, 'last_name') or ''}
+        return initial
+
+    def deserialize_instance(self, model, data):
+        return deserialize_instance(model, data)
+
+    def serialize_instance(self, instance):
+        return serialize_instance(instance)
 
 
 def get_adapter(request=None):

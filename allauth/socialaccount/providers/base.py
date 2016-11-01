@@ -24,6 +24,16 @@ class AuthError(object):
 
 
 class Provider(object):
+
+    slug = None
+
+    def __init__(self, request):
+        self.request = request
+
+    @classmethod
+    def get_slug(cls):
+        return cls.slug or cls.id
+
     def get_login_url(self, request, next=None, **kwargs):
         """
         Builds the URL to redirect to when initiating a login for this

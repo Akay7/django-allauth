@@ -7,7 +7,6 @@ import django
 from django.utils.timezone import now
 from django.test.utils import override_settings
 from django.conf import settings
-from django.core.urlresolvers import reverse
 from django.test.client import Client
 from django.core import mail
 from django.test.client import RequestFactory
@@ -27,6 +26,8 @@ from allauth.utils import (
     get_current_site,
     get_user_model,
     get_username_max_length)
+
+from ..compat import is_authenticated, reverse
 
 from . import app_settings
 
@@ -125,15 +126,59 @@ class AccountTests(TestCase):
         self.assertEqual(len(mail.outbox), 0)
         return get_user_model().objects.get(username=username)
 
-    def _create_user(self):
-        user = get_user_model().objects.create(username='john', is_active=True)
-        user.set_password('doe')
+    @override_settings(
+        ACCOUNT_USERNAME_REQUIRED=True,
+        ACCOUNT_SIGNUP_PASSOWRD_ENTER_TWICE=True)
+    def test_signup_password_twice_form_error(self):
+        resp = self.client.post(
+            reverse('account_signup'),
+            data={
+                'username': 'johndoe',
+                'email': 'john@work.com',
+                'password1': 'johndoe',
+                'password2': 'janedoe'})
+        self.assertFormError(
+            resp,
+            'form',
+            'password2',
+            'You must type the same password each time.'
+        )
+
+    @override_settings(
+        ACCOUNT_USERNAME_REQUIRED=True,
+        ACCOUNT_SIGNUP_EMAIL_ENTER_TWICE=True)
+    def test_signup_email_twice(self):
+        request = RequestFactory().post(reverse('account_signup'),
+                                        {'username': 'johndoe',
+                                         'email': 'john@work.com',
+                                         'email2': 'john@work.com',
+                                         'password1': 'johndoe',
+                                         'password2': 'johndoe'})
+        from django.contrib.messages.middleware import MessageMiddleware
+        from django.contrib.sessions.middleware import SessionMiddleware
+        SessionMiddleware().process_request(request)
+        MessageMiddleware().process_request(request)
+        request.user = AnonymousUser()
+        from .views import signup
+        signup(request)
+        user = get_user_model().objects.get(username='johndoe')
+        self.assertEqual(user.email, 'john@work.com')
+
+    def _create_user(self, username='john', password='doe'):
+        user = get_user_model().objects.create(
+            username=username,
+            is_active=True)
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
         user.save()
         return user
 
-    def _create_user_and_login(self):
-        user = self._create_user()
-        self.client.login(username='john', password='doe')
+    def _create_user_and_login(self, usable_password=True):
+        password = 'doe' if usable_password else False
+        user = self._create_user(password=password)
+        self.client_force_login(user)
         return user
 
     def test_redirect_when_authenticated(self):
@@ -148,33 +193,38 @@ class AccountTests(TestCase):
         self.assertTemplateUsed(resp, 'account/password_reset.html')
 
     def test_password_set_redirect(self):
-        resp = self._password_set_or_reset_redirect('account_set_password',
-                                                    True)
-        self.assertEqual(resp.status_code, 302)
+        resp = self._password_set_or_change_redirect(
+            'account_set_password',
+            True)
+        self.assertRedirects(
+            resp,
+            reverse('account_change_password'),
+            fetch_redirect_response=False)
 
-    def test_password_reset_no_redirect(self):
-        resp = self._password_set_or_reset_redirect('account_change_password',
-                                                    True)
+    def test_password_change_no_redirect(self):
+        resp = self._password_set_or_change_redirect(
+            'account_change_password',
+            True)
         self.assertEqual(resp.status_code, 200)
 
     def test_password_set_no_redirect(self):
-        resp = self._password_set_or_reset_redirect('account_set_password',
-                                                    False)
+        resp = self._password_set_or_change_redirect(
+            'account_set_password',
+            False)
         self.assertEqual(resp.status_code, 200)
 
-    def test_password_reset_redirect(self):
-        resp = self._password_set_or_reset_redirect('account_change_password',
-                                                    False)
-        self.assertEqual(resp.status_code, 302)
+    def test_password_change_redirect(self):
+        resp = self._password_set_or_change_redirect(
+            'account_change_password',
+            False)
+        self.assertRedirects(
+            resp,
+            reverse('account_set_password'),
+            fetch_redirect_response=False)
 
-    def _password_set_or_reset_redirect(self, urlname, usable_password):
-        user = self._create_user_and_login()
-        c = self.client
-        if not usable_password:
-            user.set_unusable_password()
-            user.save()
-        resp = c.get(reverse(urlname))
-        return resp
+    def _password_set_or_change_redirect(self, urlname, usable_password):
+        self._create_user_and_login(usable_password)
+        return self.client.get(reverse(urlname))
 
     def test_password_forgotten_username_hint(self):
         user = self._request_new_password()
@@ -271,7 +321,7 @@ class AccountTests(TestCase):
             url,
             {'password1': 'newpass123',
              'password2': 'newpass123'})
-        self.assertTrue(user.is_authenticated())
+        self.assertTrue(is_authenticated(user))
         # EmailVerificationMethod.MANDATORY sends us to the confirm-email page
         self.assertRedirects(resp, '/confirm-email/')
 
@@ -786,6 +836,29 @@ class BaseSignupFormTests(TestCase):
         self.assertEqual(field.max_length, max_length)
         widget = field.widget
         self.assertEqual(widget.attrs.get('maxlength'), str(max_length))
+
+    @override_settings(
+        ACCOUNT_USERNAME_REQUIRED=True,
+        ACCOUNT_SIGNUP_EMAIL_ENTER_TWICE=True)
+    def test_signup_email_verification(self):
+        data = {
+            'username': 'username',
+            'email': 'user@example.com',
+        }
+        form = BaseSignupForm(data, email_required=True)
+        self.assertFalse(form.is_valid())
+
+        data = {
+            'username': 'username',
+            'email': 'user@example.com',
+            'email2': 'user@example.com',
+        }
+        form = BaseSignupForm(data, email_required=True)
+        self.assertTrue(form.is_valid())
+
+        data['email2'] = 'anotheruser@example.com'
+        form = BaseSignupForm(data, email_required=True)
+        self.assertFalse(form.is_valid())
 
 
 class AuthenticationBackendTests(TestCase):

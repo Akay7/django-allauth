@@ -6,7 +6,7 @@ Requirements
 
 - Python 2.7, 3.2, 3.3, 3.4, or 3.5
 
-- Django (1.4.3+)
+- Django (1.7+)
 
 - python-openid or python3-openid (depending on your Python version)
 
@@ -33,6 +33,8 @@ Supported Flows
 Supported Providers
 -------------------
 
+- 23andMe (OAuth2)
+
 - Amazon (OAuth2)
 
 - AngelList (OAuth2)
@@ -50,6 +52,8 @@ Supported Providers
 - Bitly (OAuth2)
 
 - Douban (OAuth2)
+
+- Doximity (OAuth2)
 
 - Dropbox (OAuth, OAuth2)
 
@@ -96,6 +100,8 @@ Supported Providers
 - Reddit (OAuth2)
 
 - Shopify (OAuth2)
+
+- Slack (OAuth2)
 
 - SoundCloud (OAuth2)
 
