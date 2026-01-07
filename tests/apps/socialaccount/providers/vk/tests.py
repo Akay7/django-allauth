@@ -1,10 +1,12 @@
 from http import HTTPStatus
 
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import TestCase
 
+from allauth.socialaccount.internal import statekit
 from allauth.socialaccount.providers.vk.provider import VKProvider
 from tests.apps.socialaccount.base import OAuth2TestsMixin
-from tests.mocking import MockedResponse
+from tests.mocking import MockedResponse, mocked_response
 
 
 class VKTests(OAuth2TestsMixin, TestCase):
@@ -44,3 +46,30 @@ class VKTests(OAuth2TestsMixin, TestCase):
   "scope": "email phone"
 }
 """
+
+    def test_verify_token(self):
+        middleware = SessionMiddleware(lambda r: None)
+        middleware.process_request(self.request)
+        self.request.session.save()
+
+        state_id = statekit.stash_state(
+            self.request,
+            {"pkce_code_verifier": "dummy_verifier"},
+        )
+
+        with mocked_response(
+            MockedResponse(
+                HTTPStatus.OK,
+                self.get_login_response_json(),
+                headers={"content-type": "application/json"},
+            ),
+            self.get_mocked_response(),
+        ):
+            login = self.provider.verify_token(
+                self.request,
+                {"access_token": "dummy_code", "state": state_id},
+            )
+
+            assert login.user.email == "ivan_i123@vk.ru"
+            assert login.user.first_name == "Ivan"
+            assert login.user.last_name == "I."

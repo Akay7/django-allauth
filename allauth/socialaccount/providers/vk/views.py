@@ -1,4 +1,3 @@
-import uuid
 from requests import RequestException
 
 from allauth.socialaccount.adapter import get_adapter
@@ -18,12 +17,10 @@ class VKOAuth2Adapter(OAuth2Adapter):
 
     def get_access_token_data(self, request, app, client, pkce_code_verifier=None):
         code = get_request_param(self.request, "code")
+        state = get_request_param(self.request, "state")
         device_id = get_request_param(self.request, "device_id")
         extra_data = {
-            # "state" isn't strictly necessary for now, but since VK ID documentation doesn't
-            # specify required vs optional parameters at all, we still add this (now optional)
-            # param to make the code less fragile for future, when they may start requiring it
-            "state": str(uuid.uuid4()),
+            "state": state,
             "device_id": device_id,
         }
         data = client.get_access_token(

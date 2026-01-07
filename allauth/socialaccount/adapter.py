@@ -32,6 +32,7 @@ class DefaultSocialAccountAdapter(BaseAdapter):
             " your %s account."
         ),
         "invalid_token": _("Invalid token."),
+        "invalid_state": _("Invalid state."),
         "no_password": _("Your account has no password set up."),
         "no_verified_email": _("Your account has no verified email address."),
         "disconnect_last": _(
